@@ -6,7 +6,7 @@ import {
 import { 
   TrendingUp, Scissors, Package, Users, Palette, Settings, Plus, Trash2, 
   Check, DollarSign, Calendar, Clock, BarChart3, Star, Percent, FileDown, 
-  Smartphone, Eye, ShieldCheck, Mail, Phone, Edit, ArrowUpRight, MessageSquare, Image,
+  Smartphone, Eye, EyeOff, ShieldCheck, Mail, Phone, Edit, ArrowUpRight, MessageSquare, Image,
   Shield, QrCode, LogOut, RefreshCw, AlertTriangle, Search, Sparkles, Filter, CheckCircle, XCircle, Info, Copy, X, Globe
 } from 'lucide-react';
 
@@ -91,6 +91,8 @@ export default function AdminDashboard({
 
   const [editingProdId, setEditingProdId] = useState<string | null>(null);
   const [newColIsAdmin, setNewColIsAdmin] = useState<boolean>(false);
+  const [showLic, setShowLic] = useState<boolean>(false);
+  const maskTail8 = (c: string) => { const s = (c || '').toString(); return s.length <= 8 ? '\u2022'.repeat(s.length) : s.slice(0, s.length - 8) + '\u2022'.repeat(8); };
 
   // Navigation Tabs
   const [activeTab, setActiveTab] = useState<'dashboard' | 'appointments' | 'services' | 'products' | 'collaborators' | 'theme' | 'config' | 'retiro' | 'comments'>('dashboard');
@@ -983,7 +985,10 @@ export default function AdminDashboard({
                 <div className={`p-1.5 rounded-xl text-neutral-950 font-bold font-mono text-[10px] shadow-sm uppercase ${session.role === 'admin' ? 'bg-amber-500' : 'bg-indigo-400'}`}>
                   {session.role === 'admin' ? 'INQUILINO' : 'COLABORADOR'}
                 </div>
-                <span className="text-[9px] font-mono text-neutral-500 tracking-wider">LICENCIA: {session.licenseCode}</span>
+                <span className="text-[9px] font-mono text-neutral-500 tracking-wider">LICENCIA: {showLic ? session.licenseCode : maskTail8(session.licenseCode)}</span>
+                <button type="button" onClick={() => setShowLic(!showLic)} title={showLic ? 'Ocultar licencia' : 'Mostrar licencia'} className="text-neutral-500 hover:text-amber-500 transition-colors">
+                  {showLic ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                </button>
               </div>
               <div>
                 <h3 className="font-bold text-sm tracking-tight text-neutral-100">¡Hola, {session.name}!</h3>
@@ -1282,7 +1287,7 @@ export default function AdminDashboard({
           <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 text-[11px] font-mono text-neutral-400 space-y-1.5">
             <div className="flex justify-between">
               <span>Local ID Licencia:</span>
-              <span className="text-white font-bold">{currentTenant.id.toUpperCase()}</span>
+              <span className="text-white font-bold">{maskTail8(currentTenant.id.toUpperCase())}</span>
             </div>
             <div className="flex justify-between">
               <span>Estado del Panel:</span>
