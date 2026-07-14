@@ -448,9 +448,11 @@ export default function App() {
   const [loginRole, setLoginRole] = useState<'admin' | 'collaborator'>('admin');
   const [selectedColId, setSelectedColId] = useState<string>('');
   const [loginPassword, setLoginPassword] = useState<string>('');
+  const [loginUsuario, setLoginUsuario] = useState<string>('');
   const [loginError, setLoginError] = useState<string>('');
   const [isRegisterMode, setIsRegisterMode] = useState<boolean>(false);
   const [biometryLoading, setBiometryLoading] = useState<boolean>(false);
+  const [cloudLicense, setCloudLicense] = useState<string | null>(null);
 
   // Registro States
   const [regName, setRegName] = useState<string>('');
@@ -510,31 +512,84 @@ export default function App() {
     setLoginError('');
   };
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
 
     const matchedTenant = tenants.find(t => t.id.toLowerCase() === loginLicense.toLowerCase());
-    if (!matchedTenant) {
-      setLoginError('Código de licencia no válido. Intente SOHO-CHIC o registre uno nuevo.');
-      return;
-    }
 
+    // ----- PASO 1: identificar la licencia (local demo o licencia real CyC) -----
     if (loginStep === 1) {
-      setLoginStep(2);
-      // Auto-select first collaborator if exist
-      const tenantCols = collaborators;
-      if (tenantCols.length > 0) {
-        setSelectedColId(tenantCols[0].id);
+      if (matchedTenant) {
+        setCloudLicense(null);
+        setLoginStep(2);
+        if (collaborators.length > 0) setSelectedColId(collaborators[0].id);
+        return;
       }
+      // No es un local demo: validar la licencia real contra Supabase.
+      const code = loginLicense.trim();
+      const lic = await cloud.validarLicencia(code);
+      if (!lic || !lic.codigo) {
+        setLoginError('Codigo de licencia no valido. Verifica el codigo AURA que te entregaron, o intenta SOHO-CHIC (demo).');
+        return;
+      }
+      const codigo = lic.codigo as string;
+      if (!tenants.some(t => t.id === codigo)) {
+        const shell: TenantConfig = {
+          id: codigo, name: (lic.negocio as string) || (lic.nombre as string) || 'Aura NY', subdomain: codigo,
+          logo: '✨ AURA NY', address: 'Nueva York, NY', phone: '',
+          ownerName: 'Dueno', ownerPhone: '', ownerEmail: '', password: '',
+          theme: { id: codigo + '-theme', name: 'Manhattan Velvet (Oscuro)', mode: 'dark',
+            primaryColor: '#ffffff', secondaryColor: '#d4af37', backgroundColor: '#0a0a0a',
+            textColor: '#f5f5f5', accentColor: '#d4af37', fontFamily: 'display' },
+          whatsapp: { enabled: false, apiKey: '', phoneID: '', reminderHoursBefore: 24,
+            templatePending: 'Hola {{clientName}}, tu reserva esta bajo revision.',
+            templateConfirmed: 'Hola {{clientName}}, tu reserva esta confirmada.' },
+          stripe: { enabled: false, publicKey: '', secretKey: '', mode: 'test' }
+        };
+        setTenants(prev => [...prev, shell]);
+      }
+      setCurrentTenantId(codigo);
+      setCloudLicense(codigo);
+      setLoginStep(2);
       return;
     }
 
-    // Validar contraseña
+    // ----- PASO 2: contrasena -----
+    // Licencia real CyC: la cuenta del dueno se crea/valida contra Supabase.
+    if (cloudLicense) {
+      if (loginRole !== 'admin') {
+        setLoginError('Para entrar como colaborador, el dueno debe darte de alta primero desde el panel.');
+        return;
+      }
+      if (!loginPassword || loginPassword.length < 6) {
+        setLoginError('La contrasena debe tener al menos 6 caracteres.');
+        return;
+      }
+      if (!loginUsuario.trim()) {
+        setLoginError('Ingresa el usuario que te dio tu proveedor.');
+        return;
+      }
+      const r = await cloud.asegurarCuentaSeguraDueno(loginUsuario.trim(), loginPassword, cloudLicense);
+      if (!r.ok) { setLoginError(r.msg || 'No se pudo activar la licencia.'); return; }
+      setSession({ role: 'admin', name: 'Dueno', licenseCode: cloudLicense });
+      setCurrentTenantId(cloudLicense);
+      setIsViewingPanel(true);
+      setIsLoginModalOpen(false);
+      setLoginStep(1); setLoginPassword(''); setLoginUsuario(''); setLoginLicense(''); setCloudLicense(null);
+      return;
+    }
+
+    if (!matchedTenant) {
+      setLoginError('Codigo de licencia no valido. Intente SOHO-CHIC o registre uno nuevo.');
+      return;
+    }
+
+    // ----- Local demo (comportamiento original) -----
     if (loginRole === 'admin') {
       const masterPass = matchedTenant.password || '123';
       if (loginPassword !== masterPass) {
-        setLoginError('Contraseña de administrador incorrecta.');
+        setLoginError('Contrasena de administrador incorrecta.');
         return;
       }
       cloud.asegurarCuentaSeguraDueno(matchedTenant.ownerName || matchedTenant.name || 'dueno', loginPassword, matchedTenant.id.toUpperCase()).finally(() => executeLogin(matchedTenant.id, 'admin'));
@@ -542,7 +597,7 @@ export default function App() {
       const col = collaborators.find(c => c.id === selectedColId);
       const colPass = col?.password || '123';
       if (loginPassword !== colPass) {
-        setLoginError('Contraseña de colaborador incorrecta.');
+        setLoginError('Contrasena de colaborador incorrecta.');
         return;
       }
       cloud.asegurarCuentaSeguraColab((col && (col.username || col.name)) || 'colab', loginPassword, matchedTenant.id.toUpperCase()).finally(() => executeLogin(matchedTenant.id, 'collaborator', selectedColId));
@@ -923,6 +978,19 @@ export default function App() {
                         </div>
                       )}
 
+                      {cloudLicense && loginRole === 'admin' && (
+                        <div>
+                          <label className="block text-xs font-mono uppercase tracking-wider text-neutral-400 mb-1">Usuario</label>
+                          <input
+                            type="text"
+                            placeholder="usuario que te dio tu proveedor"
+                            value={loginUsuario}
+                            onChange={(e) => setLoginUsuario(e.target.value)}
+                            autoComplete="off"
+                            className="w-full bg-neutral-950 border border-neutral-800 focus:border-amber-500 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none transition-colors"
+                          />
+                        </div>
+                      )}
                       <div>
                         <label className="block text-xs font-mono uppercase tracking-wider text-neutral-400 mb-1">Contraseña</label>
                         <input
