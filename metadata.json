@@ -1,0 +1,6 @@
+{
+  "name": "Aura NY - Multi-Tenant Aesthetic PWA",
+  "description": "Premium New York-style multi-tenant PWA for aesthetics and salons. Features real-time booking, advanced admin dashboard, custom services/products, theme editor, collaborators, Stripe simulation, and WhatsApp reminders.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
