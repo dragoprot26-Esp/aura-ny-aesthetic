@@ -8,7 +8,7 @@ import { TenantConfig, Service, Product, Collaborator, Appointment, Sale, WhatsA
 import Header from './components/Header';
 import PublicPage from './components/PublicPage';
 import AdminDashboard from './components/AdminDashboard';
-import { Sparkles, Compass, Shield, X, ShieldAlert, Fingerprint } from 'lucide-react';
+import { Sparkles, Compass, Shield, X, ShieldAlert, Fingerprint, QrCode } from 'lucide-react';
 import * as cloud from './lib/cloud';
 
 // Molde CyC: con que arranca un inquilino nuevo (licencia real) la primera vez.
@@ -173,6 +173,25 @@ export default function App() {
     return () => clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenants, services, products, collaborators, appointments, sales, comments, suggestions, retiroOrders, whatsappLogs, session]);
+
+  // Molde CyC: pagina publica por inquilino via ?codigo= (lo que abre el QR/link)
+  useEffect(() => {
+    const codigo = new URLSearchParams(window.location.search).get('codigo');
+    if (!codigo) return;
+    (async () => {
+      try {
+        const data = await cloud.auraPublica(codigo.trim());
+        if (data) {
+          if (data.tenants && (data.tenants as any).length) setTenants(data.tenants as any);
+          if (data.services) setServices(data.services as any);
+          if (data.products) setProducts(data.products as any);
+          if (data.comments) setComments(data.comments as any);
+          setCurrentTenantId(codigo.trim());
+        }
+      } catch (e) { /* si falla, muestra el local por defecto */ }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // --- HANDLER CALLBACKS ---
 
@@ -481,6 +500,7 @@ export default function App() {
   const [isRegisterMode, setIsRegisterMode] = useState<boolean>(false);
   const [biometryLoading, setBiometryLoading] = useState<boolean>(false);
   const [cloudLicense, setCloudLicense] = useState<string | null>(null);
+  const [showQR, setShowQR] = useState<boolean>(false);
 
   // Registro States
   const [regName, setRegName] = useState<string>('');
@@ -804,6 +824,37 @@ export default function App() {
 
 
       </main>
+
+      {/* Molde CyC: QR + compartir la pagina del local (para el dueno) */}
+      {session && isViewingPanel && (
+        <button
+          type="button"
+          onClick={() => setShowQR(true)}
+          title="QR / Compartir mi pagina"
+          className="fixed bottom-5 right-5 z-40 bg-amber-500 hover:bg-amber-400 text-neutral-950 font-bold rounded-full shadow-lg px-4 py-3 text-xs flex items-center gap-2"
+        >
+          <QrCode className="w-4 h-4" /> Mi QR
+        </button>
+      )}
+      {showQR && (() => {
+        const link = window.location.origin + '/?codigo=' + encodeURIComponent(session ? session.licenseCode : currentTenantId);
+        const qrSrc = 'https://api.qrserver.com/v1/create-qr-code/?size=320x320&margin=10&data=' + encodeURIComponent(link);
+        return (
+          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowQR(false)}>
+            <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 max-w-sm w-full text-center" onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-lg font-bold text-white mb-1">QR de tu pagina</h3>
+              <p className="text-xs text-neutral-400 mb-4">Colgalo en tu local. Tus clientes lo escanean y abren tu pagina para ver y encargar.</p>
+              <img src={qrSrc} alt="QR" referrerPolicy="no-referrer" className="w-56 h-56 mx-auto rounded-xl bg-white p-2" />
+              <div className="mt-3 text-[11px] font-mono text-amber-400 break-all">{link}</div>
+              <div className="grid grid-cols-2 gap-2 mt-4">
+                <a href={qrSrc} download="qr-mi-pagina.png" target="_blank" rel="noreferrer" className="bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-semibold py-2.5 rounded-lg flex items-center justify-center">Descargar QR</a>
+                <button type="button" onClick={async () => { try { if ((navigator as any).share) { await (navigator as any).share({ title: 'Mi pagina', url: link }); } else { await navigator.clipboard.writeText(link); alert('Link copiado'); } } catch (e) {} }} className="bg-amber-500 hover:bg-amber-400 text-neutral-950 text-xs font-bold py-2.5 rounded-lg">Compartir</button>
+              </div>
+              <button type="button" onClick={() => setShowQR(false)} className="mt-3 text-xs text-neutral-500 hover:text-neutral-300">Cerrar</button>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Premium NYC Aesthetic Footer */}
       <footer className="bg-neutral-950 border-t border-neutral-900 py-8 text-center text-xs text-neutral-500 font-mono">
