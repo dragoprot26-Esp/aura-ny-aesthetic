@@ -11,6 +11,25 @@ import AdminDashboard from './components/AdminDashboard';
 import { Sparkles, Compass, Shield, X, ShieldAlert, Fingerprint } from 'lucide-react';
 import * as cloud from './lib/cloud';
 
+// Molde CyC: con que arranca un inquilino nuevo (licencia real) la primera vez.
+// Un ejemplo marcado de cada uno, para editar o borrar.
+const EJEMPLO_SERVICES: Service[] = [{
+  id: 'svc-ejemplo', name: 'Servicio de ejemplo (edita o borra)', category: 'Ejemplos',
+  duration: 60, price: 0,
+  description: 'Este es un servicio de ejemplo. Editalo con tus datos o eliminalo.',
+  customFields: [],
+}];
+const EJEMPLO_PRODUCTS: Product[] = [{
+  id: 'prod-ejemplo', name: 'Producto de ejemplo (edita o borra)',
+  description: 'Producto de ejemplo. Editalo con tus datos o eliminalo.',
+  price: 0, stock: 0, images: [], customFields: [],
+}];
+const EJEMPLO_COLABS: Collaborator[] = [{
+  id: 'col-ejemplo', name: 'Colaborador de ejemplo', role: 'Edita o borra',
+  avatar: '', specialties: [], commissionRate: 0, rating: 5,
+  schedule: { days: [], hours: '09:00 - 18:00' }, presenceStatus: 'offline',
+}];
+
 export default function App() {
   // Global States
   const [tenants, setTenants] = useState<TenantConfig[]>(() => {
@@ -125,6 +144,15 @@ export default function App() {
             if (data.suggestions) setSuggestions(data.suggestions as any);
             if (data.retiroOrders) setRetiroOrders(data.retiroOrders as any);
             if (data.whatsappLogs) setWhatsappLogs(data.whatsappLogs as any);
+          } else {
+            // Primera activacion: si es una licencia real (no un local demo), arranca con un ejemplo de cada.
+            const esDemo = INITIAL_TENANTS.some((t) => t.id.toLowerCase() === codigo.toLowerCase());
+            if (!esDemo) {
+              setServices(EJEMPLO_SERVICES);
+              setProducts(EJEMPLO_PRODUCTS);
+              setCollaborators(EJEMPLO_COLABS);
+              setAppointments([]); setSales([]); setComments([]); setSuggestions([]); setRetiroOrders([]); setWhatsappLogs([]);
+            }
           }
         } catch (e) { /* offline: sigue en local */ }
         cloudReady.current = true;
