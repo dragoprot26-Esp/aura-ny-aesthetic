@@ -10,6 +10,7 @@ import PublicPage from './components/PublicPage';
 import AdminDashboard from './components/AdminDashboard';
 import { Sparkles, Compass, Shield, X, ShieldAlert, Fingerprint, QrCode } from 'lucide-react';
 import * as cloud from './lib/cloud';
+import * as biometria from './lib/biometria';
 
 // Molde CyC: con que arranca un inquilino nuevo (licencia real) la primera vez.
 // Un ejemplo marcado de cada uno, para editar o borrar.
@@ -115,7 +116,7 @@ export default function App() {
 
   // Biometria
   const [savedBiometry, setSavedBiometry] = useState<boolean>(() => {
-    return localStorage.getItem('aura_biometry_active') === 'true';
+    return biometria.hay();
   });
 
   // Navigation role switcher (Client vs Backoffice) - kept for compatibility
@@ -555,6 +556,7 @@ export default function App() {
       setSavedBiometry(true);
     }
 
+    if (!isBiometric) ofrecerBiometria(matchedTenant.id.toUpperCase(), role, matchedTenant.ownerName || matchedTenant.name, colId);
     // Reset fields
     setLoginPassword('');
     setLoginError('');
@@ -624,6 +626,7 @@ export default function App() {
       setCurrentTenantId(cloudLicense);
       setIsViewingPanel(true);
       setIsLoginModalOpen(false);
+      ofrecerBiometria(cloudLicense, 'admin', loginUsuario.trim() || 'Dueno', undefined);
       setLoginStep(1); setLoginPassword(''); setLoginUsuario(''); setLoginLicense(''); setCloudLicense(null);
       return;
     }
@@ -729,15 +732,35 @@ export default function App() {
     setIsRegisterMode(false);
   };
 
-  const handleBiometryClick = () => {
+  const ofrecerBiometria = async (licenseCode: string, role: 'admin' | 'collaborator', name?: string, colId?: string) => {
+    try {
+      if (!(await biometria.soportada())) return;
+      if (biometria.hay()) return;
+      if (!window.confirm('¿Activar ingreso con huella / FaceID en este dispositivo para la próxima vez?')) return;
+      const ok = await biometria.registrar(licenseCode, name || 'usuario', role, colId);
+      if (ok) setSavedBiometry(true);
+    } catch (e) { /* noop */ }
+  };
+
+  const handleBiometryClick = async () => {
     setBiometryLoading(true);
-    setTimeout(() => {
-      setBiometryLoading(false);
-      const bioLicense = localStorage.getItem('aura_biometry_license') || 'soho-chic';
-      const bioRole = (localStorage.getItem('aura_biometry_role') as 'admin' | 'collaborator') || 'admin';
-      const bioColId = localStorage.getItem('aura_biometry_col_id') || undefined;
-      executeLogin(bioLicense, bioRole, bioColId, true);
-    }, 1200);
+    try {
+      const m = await biometria.desbloquear();
+      if (m) {
+        const esDemo = INITIAL_TENANTS.some((t) => t.id.toLowerCase() === m.licenseCode.toLowerCase());
+        if (!esDemo && cloud.estaLogueado()) {
+          setSession({ role: m.role, name: m.name || 'Dueno', licenseCode: m.licenseCode, collaboratorId: m.colId });
+          setCurrentTenantId(m.licenseCode);
+          setIsViewingPanel(true);
+          setIsLoginModalOpen(false);
+        } else {
+          executeLogin(m.licenseCode, m.role, m.colId, true);
+        }
+      } else {
+        setLoginError('No se pudo verificar la biometria. Ingresa con usuario y contrasena.');
+      }
+    } catch (e) { /* cancelado */ }
+    setBiometryLoading(false);
   };
 
   const openLoginModalWithCode = () => {
